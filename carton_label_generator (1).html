@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frank Body — Carton Label Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f4f0;
+    color: #1a1a1a;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e5e3dc;
+    padding: 2rem;
+    width: 100%;
+    max-width: 620px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .logo-box {
+    display: inline-flex;
+    border: 2px solid #1a1a1a;
+    border-radius: 3px;
+    overflow: hidden;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    margin-bottom: 1.25rem;
+  }
+  .logo-box span { padding: 4px 10px; }
+  .logo-box span:first-child { border-right: 2px solid #1a1a1a; font-weight: 400; }
+  .logo-box span:last-child { font-weight: 700; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #6b6b6b; margin-bottom: 1.75rem; }
+  .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #888; margin-bottom: 8px; }
+  .upload-zone {
+    border: 1.5px dashed #ccc; border-radius: 12px; padding: 1.75rem;
+    text-align: center; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    background: #fafaf8;
+  }
+  .upload-zone:hover { background: #f0efe9; border-color: #aaa; }
+  .upload-zone input { display: none; }
+  .upload-text { font-size: 14px; color: #555; margin-bottom: 6px; }
+  .template-link { font-size: 12px; color: #888; }
+  .template-link a { color: #1a1a1a; text-decoration: underline; cursor: pointer; }
+  .divider { border: none; border-top: 1px solid #eee; margin: 1.5rem 0; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+  .field-group label { font-size: 12px; color: #666; font-weight: 500; }
+  .field-group input, .field-group select {
+    border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px;
+    font-size: 14px; font-family: inherit; background: #fff; color: #1a1a1a;
+    outline: none; transition: border-color 0.15s;
+  }
+  .field-group input:focus, .field-group select:focus { border-color: #888; }
+  .preview-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { font-size: 11px; font-weight: 600; color: #888; text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  tbody td { padding: 7px 8px; border-bottom: 1px solid #f0f0f0; color: #1a1a1a; }
+  tbody tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; background: #e8f5e9; color: #2e7d32; }
+  .summary { font-size: 13px; color: #666; margin-top: 10px; }
+  .summary strong { color: #1a1a1a; }
+  .btn { display: block; width: 100%; margin-top: 14px; padding: 12px; background: #1a1a1a; color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+  .btn:hover { background: #333; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .status { font-size: 13px; color: #666; margin-top: 10px; text-align: center; min-height: 20px; }
+  .status.err { color: #c0392b; }
+  .status.ok { color: #27ae60; }
+  .empty-state { font-size: 13px; color: #aaa; }
+  .desc-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } .card { padding: 1.25rem; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo-box"><span>frank</span><span>body</span></div>
+  <h1>Carton label generator</h1>
+  <p class="subtitle">Upload a CSV to generate printable carton labels as a PDF.</p>
+
+  <p class="section-label">1 — Upload CSV</p>
+  <div class="upload-zone" onclick="document.getElementById('csvInput').click()">
+    <input type="file" id="csvInput" accept=".csv">
+    <p class="upload-text" id="uploadLabel">📄 Click to select a CSV file</p>
+    <p class="template-link">No CSV yet? <a onclick="downloadTemplate(event)">Download example template</a></p>
+  </div>
+
+  <hr class="divider">
+  <p class="section-label">2 — Preview</p>
+  <div id="previewArea"><p class="empty-state">No data loaded yet.</p></div>
+
+  <hr class="divider">
+  <p class="section-label">3 — Options</p>
+  <div class="field-row">
+    <div class="field-group">
+      <label>Brand name</label>
+      <input type="text" id="brandName" value="frank body">
+    </div>
+    <div class="field-group">
+      <label>Label size</label>
+      <select id="labelSize">
+        <option value="a5l" selected>A5 landscape (original)</option>
+        <option value="a4l">A4 landscape</option>
+        <option value="label">4 × 6 inch label</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn" id="generateBtn" disabled onclick="generatePDF()">Generate PDF labels</button>
+  <p class="status" id="statusMsg"></p>
+</div>
+
+<script>
+let parsedRows = [];
+const REQUIRED = ['vpo_number','sku','description','carton_qty'];
+
+function downloadTemplate(e) {
+  e.stopPropagation();
+  const csv = 'vpo_number,sku,description,carton_qty\nVPO-0323388,16101067,Niacinamide Smoothing Lip Treatment - 5 g / 0.18 oz,42\nVPO-0323389,10080438,Coconut Coffee Scrub - 200 g / 7.05 oz,24';
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'carton_labels_template.csv';
+  a.click();
+}
+
+document.getElementById('csvInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('uploadLabel').textContent = '📄 ' + file.name;
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    transformHeader: h => h.trim().toLowerCase().replace(/\s+/g,'_'),
+    complete: function(results) {
+      const cols = results.meta.fields || [];
+      const missing = REQUIRED.filter(r => !cols.includes(r));
+      if (missing.length) { showError('Missing columns: ' + missing.join(', ')); return; }
+      parsedRows = results.data;
+      showPreview(parsedRows);
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('statusMsg').textContent = '';
+    },
+    error: function() { showError('Could not parse CSV.'); }
+  });
+});
+
+function showError(msg) {
+  parsedRows = [];
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('previewArea').innerHTML = '<p style="font-size:13px;color:#c0392b;">' + msg + '</p>';
+}
+
+function showPreview(rows) {
+  const maxShow = 5;
+  let html = '<div class="preview-wrap"><table><thead><tr><th>VPO number</th><th>SKU</th><th>Description</th><th>Qty</th><th>Labels</th></tr></thead><tbody>';
+  rows.slice(0, maxShow).forEach(r => {
+    const qty = parseInt(r.carton_qty) || 1;
+    html += `<tr><td>${r.vpo_number}</td><td>${r.sku}</td><td class="desc-cell" title="${r.description}">${r.description}</td><td>${qty}</td><td><span class="badge">${qty}</span></td></tr>`;
+  });
+  if (rows.length > maxShow) html += `<tr><td colspan="5" style="font-size:12px;color:#aaa;text-align:center;padding:8px;">… and ${rows.length - maxShow} more rows</td></tr>`;
+  html += '</tbody></table></div>';
+  const total = rows.reduce((s, r) => s + (parseInt(r.carton_qty) || 1), 0);
+  html += `<p class="summary">${rows.length} product${rows.length>1?'s':''} — <strong>${total} labels</strong> will be generated</p>`;
+  document.getElementById('previewArea').innerHTML = html;
+}
+
+function generatePDF() {
+  if (!parsedRows.length) return;
+  const btn = document.getElementById('generateBtn');
+  const msg = document.getElementById('statusMsg');
+  btn.disabled = true;
+  msg.className = 'status';
+  msg.textContent = 'Generating…';
+  setTimeout(() => {
+    try {
+      const sizeKey = document.getElementById('labelSize').value;
+      const brand = document.getElementById('brandName').value || 'frank body';
+      // All in mm. Original is A5 landscape: 210 x 148
+      const sizes = { a5l:[210,148], a4l:[297,210], label:[152.4,101.6] };
+      const [pw, ph] = sizes[sizeKey];
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:[pw,ph] });
+      let pageCount = 0;
+      parsedRows.forEach(row => {
+        const totalCartons = parseInt(row.carton_qty) || 1;
+        for (let i = 1; i <= totalCartons; i++) {
+          if (pageCount > 0) doc.addPage([pw, ph], 'landscape');
+          drawLabel(doc, pw, ph, brand, row.vpo_number||'', row.sku||'', row.description||'', i, totalCartons);
+          pageCount++;
+        }
+      });
+      const filename = 'carton_labels_' + new Date().toISOString().slice(0,10) + '.pdf';
+      doc.save(filename);
+      msg.className = 'status ok';
+      msg.textContent = `Done — ${pageCount} label${pageCount>1?'s':''} saved as ${filename}`;
+    } catch(err) {
+      msg.className = 'status err';
+      msg.textContent = 'Error: ' + err.message;
+    }
+    btn.disabled = false;
+  }, 50);
+}
+
+function drawLabel(doc, pw, ph, brand, vpo, sku, desc, cartonNum, totalCartons) {
+  const M = 8;       // outer margin
+  const lx = M;
+  const ly = M;
+  const lw = pw - M*2;
+  const lh = ph - M*2;
+
+  // Outer border
+  doc.setDrawColor(0,0,0);
+  doc.setLineWidth(0.6);
+  doc.rect(lx, ly, lw, lh);
+
+  // --- Header row ---
+  const headerH = lh * 0.22;
+  // Bottom border of header
+  doc.setLineWidth(0.4);
+  doc.line(lx, ly + headerH, lx + lw, ly + headerH);
+
+  // Logo box
+  const logoW = lw * 0.22;
+  const logoH = headerH * 0.65;
+  const logoX = lx + lw * 0.03;
+  const logoY = ly + (headerH - logoH) / 2;
+  doc.setLineWidth(0.5);
+  doc.rect(logoX, logoY, logoW, logoH);
+  // Inner divider
+  doc.line(logoX + logoW/2, logoY, logoX + logoW/2, logoY + logoH);
+
+  const parts = brand.trim().split(' ');
+  const w1 = parts[0] || '';
+  const w2 = parts.slice(1).join(' ') || '';
+  const logoTextY = logoY + logoH * 0.65;
+  doc.setFont('courier','normal');
+  doc.setFontSize(ph * 0.055);
+  doc.setTextColor(0,0,0);
+  doc.text(w1, logoX + logoW*0.25, logoTextY, {align:'center'});
+  doc.setFont('courier','bold');
+  doc.text(w2, logoX + logoW*0.75, logoTextY, {align:'center'});
+
+  // CARTON LABEL title
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(ph * 0.072);
+  doc.setTextColor(0,0,0);
+  doc.text('CARTON LABEL', lx + lw - lw*0.03, ly + headerH/2 + ph*0.025, {align:'right'});
+
+  // --- Three field rows ---
+  // Heights: VPO row, SKU row, DESCRIPTION row, bottom bar
+  const bodyH = lh - headerH;
+  const botBarH = lh * 0.22;
+  const fieldAreaH = bodyH - botBarH;
+  const rowH = fieldAreaH / 3;
+  const fieldX = lx + lw * 0.03;
+  const fieldW = lw * 0.94;
+  const blueLineColor = [100, 149, 237]; // cornflower blue like original
+
+  function drawFieldRow(label, value, rowY) {
+    // bottom border
+    doc.setDrawColor(0,0,0);
+    doc.setLineWidth(0.4);
+    doc.line(lx, rowY + rowH, lx + lw, rowY + rowH);
+
+    // Label
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(ph * 0.048);
+    doc.setTextColor(80,80,80);
+    doc.text(label, fieldX, rowY + rowH * 0.32);
+
+    // Value in Courier Bold
+    doc.setFont('courier','bold');
+    doc.setFontSize(ph * 0.068);
+    doc.setTextColor(0,0,0);
+    const valY = rowY + rowH * 0.72;
+    doc.text(value, fieldX, valY);
+
+    // Blue underline
+    doc.setDrawColor(...blueLineColor);
+    doc.setLineWidth(0.5);
+    doc.line(fieldX, valY + 1.5, fieldX + fieldW, valY + 1.5);
+  }
+
+  const row1Y = ly + headerH;
+  const row2Y = row1Y + rowH;
+  const row3Y = row2Y + rowH;
+
+  drawFieldRow('VPO NUMBER', vpo, row1Y);
+  drawFieldRow('SKU / VENDOR ITEM NUMBER', sku, row2Y);
+
+  // Description row (no bottom line — bottom bar takes over)
+  doc.setDrawColor(0,0,0);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(ph * 0.048);
+  doc.setTextColor(80,80,80);
+  doc.text('PRODUCT DESCRIPTION', fieldX, row3Y + rowH * 0.32);
+  doc.setFont('courier','bold');
+  doc.setFontSize(ph * 0.068);
+  doc.setTextColor(0,0,0);
+  const descLines = doc.splitTextToSize(desc, fieldW);
+  const descValY = row3Y + rowH * 0.72;
+  doc.text(descLines[0], fieldX, descValY);
+  doc.setDrawColor(...blueLineColor);
+  doc.setLineWidth(0.5);
+  doc.line(fieldX, descValY + 1.5, fieldX + fieldW, descValY + 1.5);
+
+  // --- Bottom bar: CARTON NUMBER | CARTON QUANTITY ---
+  const barY = ly + lh - botBarH;
+  doc.setDrawColor(0,0,0);
+  doc.setLineWidth(0.4);
+  doc.line(lx, barY, lx + lw, barY);
+
+  const halfW = lw / 2;
+  doc.line(lx + halfW, barY, lx + halfW, ly + lh);
+
+  function drawBarCell(label, value, cellX, cellW) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(ph * 0.048);
+    doc.setTextColor(80,80,80);
+    doc.text(label, cellX + cellW*0.04, barY + botBarH * 0.35);
+
+    doc.setFont('courier','bold');
+    doc.setFontSize(ph * 0.08);
+    doc.setTextColor(0,0,0);
+    const valY = barY + botBarH * 0.78;
+    doc.text(value, cellX + cellW*0.04, valY);
+
+    doc.setDrawColor(...blueLineColor);
+    doc.setLineWidth(0.5);
+    doc.line(cellX + cellW*0.04, valY + 1.5, cellX + cellW*0.93, valY + 1.5);
+  }
+
+  drawBarCell('CARTON NUMBER', `${cartonNum} of ${totalCartons}`, lx, halfW);
+  drawBarCell('CARTON QUANTITY', String(totalCartons), lx + halfW, halfW);
+}
+</script>
+</body>
+</html>
